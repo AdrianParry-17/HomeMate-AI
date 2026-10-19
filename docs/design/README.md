@@ -1,0 +1,3 @@
+# HomeMate-AI Design Directory
+
+This directory consist of design document like architecture, ADRs, UML, UI/UX design,...

@@ -1,0 +1,3 @@
+# HomeMate-AI Management Directory
+
+This directory consist of project plan, status report,...

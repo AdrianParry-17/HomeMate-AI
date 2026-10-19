@@ -1,0 +1,3 @@
+# HomeMate-AI Test Directory
+
+This directory consist of test plan, test cases, test reports,...

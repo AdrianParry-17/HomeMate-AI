@@ -1,0 +1,3 @@
+# HomeMate-AI Requirements Directory
+
+This directory consist of Visions, SRS, use cases, mockups,...
