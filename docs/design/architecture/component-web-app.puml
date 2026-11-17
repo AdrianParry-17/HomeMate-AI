@@ -1,0 +1,44 @@
+@startuml component-web-app
+' HomeMate AI - Web App components (C4 level 3), PA3.
+' Owner: Huynh Minh Hung (SCRUM-22). Classes in each component: docs/design/uml/class-diagram-services.puml
+!pragma layout smetana
+!include <C4/C4_Component>
+skinparam dpi 150
+LAYOUT_TOP_DOWN()
+
+title HomeMate AI - Web App components (C4 level 3)
+
+Person(user, "Owner / Crew Leader")
+
+Container_Boundary(spa, "Web App (React SPA, runs in the browser)") {
+  Component(shell, "App Shell & Navigation", "React", "Global sidebar, project switcher, routing; hides owner-only menus from crew leaders (UX only, not a security control)")
+  Component(access, "Access & Projects", "SCR-01, access modal; AuthService, ProjectService", "Sign-up / sign-in / reset, create project (max 2 active), invite crew and set permissions. FR-01 to FR-04")
+  Component(budget, "Budget & Expenses (F01)", "SCR-02, SCR-03; BudgetService, ExpenseService, BudgetThresholdEvaluator", "Budget allocation, expense CRUD, dashboard totals and 85 % / 100 % indicators. FR-05 to FR-12")
+  Component(stages, "Stage Planning (F02)", "SCR-04; StageService, ConstructionStage", "AI draft review and confirm, stage CRUD and reorder, progress updates. FR-13 to FR-16")
+  Component(work, "Workforce & Attendance (F03)", "SCR-05; WorkerService, AttendanceService, WageCalculator", "Worker profiles, daily attendance, period wage estimates. FR-17 to FR-20")
+  Component(ai, "AI Assistant (F04)", "SCR-06; AIAssistantService", "Project Q&A chat with safety disclaimer and error fallback. FR-21 to FR-23")
+  Component(shared, "Shared Validation & Cache", "Zod schemas, TanStack Query", "Used by every feature component: input rules that mirror the database CHECKs; request cache and retry state")
+  Component(gw, "Supabase Gateway", "SupabaseGateway (singleton), supabase-js", "Single access point to Supabase: one client and session per tab, function invoke with timeout, error mapping to Result<T>")
+}
+
+Container(auth, "Auth Service", "Supabase Auth")
+Container(api, "Data API", "Supabase PostgREST")
+Container(fn, "Edge Functions", "Deno")
+
+Rel_D(user, shell, "Uses", "HTTPS")
+Rel_D(shell, access, "Routes to")
+Rel_D(shell, budget, "Routes to")
+Rel_D(shell, stages, "Routes to")
+Rel_D(shell, work, "Routes to")
+Rel_D(shell, ai, "Routes to")
+Rel_D(access, gw, "Uses")
+Rel_D(budget, gw, "Uses")
+Rel_D(stages, gw, "Uses")
+Rel_D(work, gw, "Uses")
+Rel_D(ai, gw, "Uses")
+Rel_D(gw, auth, "Auth calls", "HTTPS/JSON")
+Rel_D(gw, api, "CRUD and RPC", "HTTPS/JSON + JWT")
+Rel_D(gw, fn, "invoke()", "HTTPS/JSON + JWT")
+
+SHOW_LEGEND()
+@enduml
