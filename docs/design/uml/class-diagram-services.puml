@@ -1,0 +1,158 @@
+@startuml class-diagram-services
+' HomeMate AI — Design class diagram, packages "client.services" and
+' "edge-functions" (PA3, SCRUM-30). Entities are defined in class-diagram-domain.
+skinparam dpi 160
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #1F4E79
+  ArrowColor #1F4E79
+  HeaderBackgroundColor #DCE6F2
+}
+hide empty members
+left to right direction
+
+package "client.services (React app, supabase-js)" {
+  class AuthService {
+    + signUp(email, password, fullName) : Result<User>
+    + signIn(email, password) : Result<Session>
+    + signOut() : void
+    + requestPasswordReset(email) : Result<void>
+  }
+  class ProjectService {
+    + createProject(input : ProjectInput) : Result<Project>
+    + listMyProjects() : Project[]
+    + inviteCrewLeader(projectId, email, perms : Permission[]) : Result<ProjectMember>
+    + updatePermissions(memberId, perms : Permission[]) : Result<void>
+    + revokeAccess(memberId) : Result<void>
+    + acceptInvitation(projectId) : Result<void>
+  }
+  class BudgetService {
+    + configureBudget(projectId, total : VND) : Result<void>
+    + updateAllocation(categoryId, planned : VND) : Result<void>
+    + getDashboardSummary(projectId) : DashboardSummary
+  }
+  class ExpenseService {
+    + addExpense(input : ExpenseInput) : Result<Expense>
+    + updateExpense(id, patch : ExpenseInput) : Result<Expense>
+    + deleteExpense(id) : Result<void>
+    + listExpenses(projectId, filter : ExpenseFilter) : Expense[]
+  }
+  class StageService {
+    + requestAIDraft(projectId, input : PlanInput) : Result<StageDraft[]>
+    + confirmDraft(projectId, drafts : StageDraft[]) : Result<number>
+    + addStage(input : StageInput) : Result<ConstructionStage>
+    + updateStage(id, patch : StageInput) : Result<void>
+    + reorderStages(projectId, orderedIds : UUID[]) : Result<void>
+    + deleteStage(id) : Result<void>
+    + updateProgress(id, status, actualStart, actualEnd, note) : Result<void>
+  }
+  class WorkerService {
+    + createWorker(input : WorkerInput) : Result<Worker>
+    + updateWorker(id, patch : WorkerInput) : Result<void>
+    + deactivateWorker(id) : Result<void>
+    + listRoster(projectId) : WorkerRosterItem[]
+  }
+  class AttendanceService {
+    - gateway : SupabaseGateway
+    + recordAttendance(projectId, date, entries : AttendanceEntry[]) : Result<number>
+    + getAttendanceSheet(projectId, from, to) : AttendanceRecord[]
+    + getWageSummary(projectId, from, to) : WageSummary
+  }
+  class AIAssistantService {
+    + askQuestion(projectId, question : string) : Result<AIAnswer>
+    + getHistory(projectId) : ChatMessage[]
+  }
+  class SupabaseGateway <<singleton>> {
+    + client : SupabaseClient
+    + invoke(fn : string, body, timeoutMs) : Result<any>
+    + toResult(error : PostgrestError) : Result<never>
+  }
+  ProjectService --> SupabaseGateway
+  BudgetService --> SupabaseGateway
+  ExpenseService --> SupabaseGateway
+  StageService --> SupabaseGateway
+  WorkerService --> SupabaseGateway
+  AttendanceService --> SupabaseGateway
+  AIAssistantService --> SupabaseGateway
+  AuthService --> SupabaseGateway
+}
+
+package "edge-functions (Deno, server-side secrets)" {
+  abstract class EdgeHandler <<template method>> {
+    + handle(req : Request) : Response
+    # authenticate(req) : AuthContext
+    # {abstract} execute(ctx : AuthContext, body) : any
+    # toErrorResponse(e : Error) : Response
+  }
+  class GenerateStagePlanHandler {
+    # execute(ctx, body : PlanInput) : StageDraft[]
+  }
+  class AskAssistantHandler {
+    # execute(ctx, body : Question) : AIAnswer
+  }
+  class InviteCrewHandler {
+    # execute(ctx, body : Invite) : ProjectMember
+  }
+  interface AIProvider {
+    + generateJson(prompt : string, schema : JsonSchema, timeoutMs : number) : unknown
+    + generateText(prompt : string, timeoutMs : number) : string
+  }
+  class GeminiClient <<adapter>> {
+    - apiKey : string
+    - model : string
+    - baseUrl : string
+    + generateJson(prompt, schema, timeoutMs) : unknown
+    + generateText(prompt, timeoutMs) : string
+    - toAppError(status, body) : AIUnavailableError
+  }
+  class MockAIProvider <<test double>>
+  class PromptBuilder {
+    - templateVersion : string
+    + buildStagePlanPrompt(input : PlanInput) : string
+    + buildQuestionPrompt(ctx : ProjectContext, q : string) : string
+  }
+  class ProjectContextBuilder <<builder>> {
+    - snapshot : ProjectSnapshot
+    - sanitizer : PiiSanitizer
+    - maxTokens : number = 2000
+    + fromSnapshot(json : object) : ProjectContextBuilder
+    + sanitize(s : PiiSanitizer) : ProjectContextBuilder
+    + limitTokens(max : number) : ProjectContextBuilder
+    + build() : ProjectContext
+  }
+  class PiiSanitizer {
+    + sanitize(text : string) : string
+  }
+  class StagePlanValidator {
+    + validate(raw : unknown) : StageDraft[]
+  }
+  class SafetyPolicy {
+    + DISCLAIMER : string
+    + isCertificationRequest(q : string) : boolean
+    + attachDisclaimer(answer : string) : AIAnswer
+  }
+
+  EdgeHandler <|-- GenerateStagePlanHandler
+  EdgeHandler <|-- AskAssistantHandler
+  EdgeHandler <|-- InviteCrewHandler
+  AIProvider <|.. GeminiClient
+  AIProvider <|.. MockAIProvider
+  GenerateStagePlanHandler --> AIProvider
+  GenerateStagePlanHandler --> PromptBuilder
+  GenerateStagePlanHandler --> StagePlanValidator
+  GenerateStagePlanHandler --> SafetyPolicy
+  AskAssistantHandler --> AIProvider
+  AskAssistantHandler --> PromptBuilder
+  AskAssistantHandler --> ProjectContextBuilder
+  AskAssistantHandler --> SafetyPolicy
+  ProjectContextBuilder ..> PiiSanitizer
+}
+
+StageService ..> GenerateStagePlanHandler : HTTPS invoke\n"generate-stage-plan"
+AIAssistantService ..> AskAssistantHandler : HTTPS invoke\n"ask-assistant"
+ProjectService ..> InviteCrewHandler : HTTPS invoke\n"invite-crew"
+@enduml
