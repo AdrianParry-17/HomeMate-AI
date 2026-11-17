@@ -1,0 +1,51 @@
+@startuml component-edge-functions
+' HomeMate AI - Edge Functions components (C4 level 3), PA3.
+' Owner: Huynh Minh Hung (SCRUM-22). Classes: docs/design/uml/class-diagram-services.puml (package edge-functions)
+!pragma layout smetana
+!include <C4/C4_Component>
+skinparam dpi 150
+LAYOUT_TOP_DOWN()
+
+title HomeMate AI - Edge Functions components (C4 level 3)
+
+Container(spa, "Web App", "React SPA")
+
+Container_Boundary(fn, "Edge Functions (Supabase Edge Runtime, Deno)") {
+  Component(base, "Request Pipeline", "EdgeHandler (Template Method)", "Entry point of every function: authenticate(JWT) -> execute() of the handler -> toErrorResponse()")
+  Component(gsp, "generate-stage-plan", "GenerateStagePlanHandler", "UC-06: builds the prompt, requests a JSON stage plan, validates it, returns StageDraft[] with disclaimer. Saves nothing.")
+  Component(ask, "ask-assistant", "AskAssistantHandler", "UC-10: loads the project snapshot, builds a minimized context, asks Gemini, returns the answer with disclaimer")
+  Component(inv, "invite-crew", "InviteCrewHandler", "UC-02: checks the caller owns the project, sends the Supabase Auth invitation, creates the project_members row")
+  Component(prompt, "Prompt & Context", "PromptBuilder, ProjectContextBuilder, PiiSanitizer", "Versioned prompt templates; bounded context (2,000 tokens); removes phone numbers and e-mails from free text")
+  Component(port, "AI Provider Port", "AIProvider, GeminiClient, MockAIProvider", "Only code that calls Gemini; 20 s timeout; maps 429 / 5xx / timeout to AIUnavailableError")
+  Component(safety, "Output Safety", "StagePlanValidator, SafetyPolicy", "Schema check of the AI JSON; mandatory disclaimer; detects certification requests")
+}
+
+System_Ext(gemini, "Google Gemini API")
+Container(api, "Data API", "Supabase PostgREST")
+Container(auth, "Auth Service", "Supabase Auth")
+
+Lay_R(gsp, ask)
+Lay_R(ask, inv)
+Lay_R(prompt, port)
+Lay_R(port, safety)
+Lay_R(gemini, api)
+Lay_R(api, auth)
+
+Rel_D(spa, base, "POST /generate-stage-plan, /ask-assistant, /invite-crew", "HTTPS + JWT")
+Rel_R(base, auth, "Verifies JWT", "HTTPS")
+Rel_D(base, gsp, "execute()")
+Rel_D(base, ask, "execute()")
+Rel_D(base, inv, "execute()")
+Rel_D(gsp, prompt, "Builds prompt")
+Rel_D(gsp, port, "generateJson()")
+Rel_D(gsp, safety, "Validates draft; adds disclaimer")
+Rel_D(ask, prompt, "Builds context and prompt")
+Rel_D(ask, port, "generateText()")
+Rel_D(ask, safety, "Adds disclaimer")
+Rel_D(ask, api, "RPC get_ai_project_context", "HTTPS/JSON")
+Rel_D(inv, api, "Insert project_members", "HTTPS/JSON")
+Rel_D(inv, auth, "Invite user (service-role key)", "HTTPS/JSON")
+Rel_D(port, gemini, "Prompt / response", "HTTPS/JSON")
+
+SHOW_LEGEND()
+@enduml

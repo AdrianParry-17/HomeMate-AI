@@ -1,0 +1,52 @@
+@startuml deployment
+' HomeMate AI - Deployment diagram, PA3 (target environment for PA5).
+' Owner: Huynh Minh Hung (SCRUM-22).
+!pragma layout smetana
+!include <C4/C4_Deployment>
+skinparam dpi 150
+LAYOUT_TOP_DOWN()
+
+title HomeMate AI - Deployment
+
+Deployment_Node(device, "User device", "Desktop / laptop (Chrome, Edge) or phone (mobile Chromium)") {
+  Deployment_Node(browser, "Web browser", "HTML5, ES2022") {
+    Container(spa, "Web App", "React SPA bundle", "All Web App components execute here; holds the session JWT and the public anon key")
+  }
+}
+
+Deployment_Node(vercel, "Vercel", "Global CDN, static hosting") {
+  Container(static, "Static build", "Vite output: HTML, JS, CSS", "Production deployment from main; preview deployment per pull request")
+}
+
+Deployment_Node(supabase, "Supabase Cloud project", "Region: Southeast Asia (Singapore)") {
+  Deployment_Node(gateway, "API gateway", "HTTPS :443, single project URL") {
+    Container(auth, "Auth Service", "Supabase Auth", "Accounts, JWT, invitations; built-in mailer (SMTP)")
+    Container(api, "Data API", "PostgREST", "REST and RPC over the public schema")
+    Deployment_Node(edge, "Edge Runtime", "Deno") {
+      Container(fn, "Edge Functions", "generate-stage-plan, ask-assistant, invite-crew", "Secrets: GEMINI_API_KEY, SUPABASE_SERVICE_ROLE_KEY")
+    }
+  }
+  Deployment_Node(pg, "Database server", "PostgreSQL 15+, managed") {
+    ContainerDb(db, "Database", "schema.sql + rls-policies.sql applied as migrations", "Tables, RLS, triggers, views, RPC functions")
+  }
+}
+
+Deployment_Node(google, "Google Cloud", "generativelanguage.googleapis.com") {
+  Container(gemini, "Gemini API", "LLM", "Model name set by an environment variable")
+}
+
+Deployment_Node(github, "GitHub", "Repository + GitHub Actions") {
+  Container(ci, "CI workflow", "GitHub Actions", "Lint, type-check and unit tests on every pull request. Database migrations and functions are deployed with the Supabase CLI (supabase db push, supabase functions deploy).")
+}
+
+Rel_D(spa, static, "Downloads the app", "HTTPS :443")
+Rel_D(spa, auth, "Sign-in, session refresh", "HTTPS :443")
+Rel_D(spa, fn, "Invoke functions", "HTTPS :443 + JWT")
+Rel_D(spa, api, "CRUD and RPC", "HTTPS :443 + JWT")
+Rel_D(fn, gemini, "Prompts", "HTTPS :443")
+Rel_R(fn, api, "RPC, inserts", "HTTPS (internal)")
+Rel_D(api, db, "SQL as the caller", "PostgreSQL protocol (internal)")
+Rel_U(ci, static, "Vercel Git integration builds and deploys", "HTTPS")
+
+SHOW_LEGEND()
+@enduml

@@ -1,0 +1,25 @@
+@startuml c4-context
+' HomeMate AI - System Context (C4 level 1), PA3 update of PA1 Figure 3.1.
+' Owner: Huynh Minh Hung (SCRUM-21). Render: java -jar plantuml.jar -tpng *.puml
+!pragma layout smetana
+!include <C4/C4_Context>
+skinparam dpi 150
+LAYOUT_TOP_DOWN()
+
+title HomeMate AI - System Context (C4 level 1)
+
+Person(owner, "Household Owner", "Self-manages a home construction or renovation project; controls budget, expenses, stages, workers and AI questions")
+Person(crew, "Crew Leader", "Invited by the owner; records attendance and updates assigned stages only")
+
+System(homemate, "HomeMate AI", "Responsive web application for self-managed residential construction: costs, stage plan, attendance and wages, project-aware AI Q&A (F01-F04)")
+
+System_Ext(gemini, "Google Gemini API", "External large language model service")
+System_Ext(email, "Email delivery", "Supabase Auth mailer; delivers account and invitation emails")
+
+Rel_D(owner, homemate, "Manages project records; asks AI questions", "HTTPS, web browser")
+Rel_D(crew, homemate, "Records attendance; updates assigned stage progress", "HTTPS, mobile browser")
+Rel_D(homemate, gemini, "Requests stage-plan drafts and answers using minimized project context", "HTTPS/JSON")
+Rel_D(homemate, email, "Sends verification, password-reset and invitation emails", "SMTP")
+
+SHOW_LEGEND()
+@enduml

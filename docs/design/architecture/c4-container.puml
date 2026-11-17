@@ -1,0 +1,37 @@
+@startuml c4-container
+' HomeMate AI - Containers (C4 level 2), PA3.
+' Owner: Huynh Minh Hung (SCRUM-21). Names match docs/design/data and docs/design/uml.
+!pragma layout smetana
+!include <C4/C4_Container>
+skinparam dpi 150
+LAYOUT_TOP_DOWN()
+
+title HomeMate AI - Containers (C4 level 2)
+
+Person(owner, "Household Owner")
+Person(crew, "Crew Leader")
+
+System_Boundary(hm, "HomeMate AI") {
+  Container(spa, "Web App", "React, TypeScript, Vite, Tailwind CSS, TanStack Query, Zod, supabase-js", "Single-page app running in the user's browser: screens SCR-01 to SCR-06, client services, input validation, live previews. Untrusted.")
+  Container(auth, "Auth Service", "Supabase Auth (configured)", "Sign-up, sign-in, sign-out, JWT sessions, password reset, crew invitations. Accounts live in the database's auth schema; trigger handle_new_user creates the profile row.")
+  Container(fn, "Edge Functions", "Supabase Edge Functions (Deno, TypeScript)", "generate-stage-plan, ask-assistant, invite-crew. The only code that holds secrets.")
+  Container(api, "Data API", "Supabase PostgREST", "REST and RPC endpoints generated from the public schema; runs every request as the calling user")
+  ContainerDb(db, "Database", "Supabase PostgreSQL", "11 tables, CHECK constraints, triggers, 5 views, 6 RPC functions, RLS on every table")
+}
+
+System_Ext(email, "Email delivery", "Supabase Auth mailer")
+System_Ext(gemini, "Google Gemini API", "Large language model service")
+
+Rel_D(owner, spa, "Uses", "HTTPS")
+Rel_D(crew, spa, "Uses", "HTTPS")
+Rel_D(spa, auth, "Signs up / in, refreshes session", "HTTPS/JSON")
+Rel_D(spa, fn, "Invokes the 3 functions", "HTTPS/JSON + JWT")
+Rel_D(spa, api, "Reads and writes project data; calls RPCs", "HTTPS/JSON + JWT")
+Rel_L(fn, auth, "Verifies JWT; sends invitation (service-role key)", "HTTPS/JSON")
+Rel_D(fn, api, "RPC get_ai_project_context; inserts project_members", "HTTPS/JSON")
+Rel_D(api, db, "Runs SQL as the caller; RLS applied", "PostgreSQL protocol")
+Rel_D(auth, email, "Sends verification, reset and invitation emails", "SMTP")
+Rel_D(fn, gemini, "Sends minimized prompt (20 s timeout)", "HTTPS/JSON")
+
+SHOW_LEGEND()
+@enduml
