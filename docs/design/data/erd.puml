@@ -1,0 +1,166 @@
+@startuml erd
+' HomeMate AI — Physical ERD (PA3, SCRUM-27). Source of truth: schema.sql
+hide circle
+skinparam dpi 160
+skinparam linetype ortho
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #1F4E79
+  HeaderBackgroundColor #DCE6F2
+  ArrowColor #1F4E79
+}
+left to right direction
+
+entity "auth.users\n<<Supabase Auth>>" as users {
+  * id : uuid <<PK>>
+  --
+  * email : text <<UQ>>
+}
+
+entity profiles {
+  * id : uuid <<PK, FK>>
+  --
+  * full_name : text
+  * created_at / updated_at
+}
+
+entity projects {
+  * id : uuid <<PK>>
+  --
+  * owner_id : uuid <<FK>>
+  * name : text
+  * construction_type : enum
+  floor_count : smallint
+  floor_area_m2 : numeric(8,2)
+  target_start_date : date
+  target_end_date : date
+  * status : enum {active, completed, archived}
+}
+
+entity project_budgets {
+  * project_id : uuid <<PK, FK>>
+  --
+  * total_planned_amount : bigint (VND)
+}
+
+entity project_members {
+  * id : uuid <<PK>>
+  --
+  * project_id : uuid <<FK>>
+  * user_id : uuid <<FK>>
+  * status : enum {invited, active, revoked}
+  * can_record_attendance : bool
+  * can_update_assigned_stages : bool
+  accepted_at : timestamptz
+}
+
+entity budget_categories {
+  * id : uuid <<PK>>
+  --
+  * project_id : uuid <<FK>>
+  * name : text
+  * planned_amount : bigint (VND)
+  * sort_order : smallint
+}
+
+entity expenses {
+  * id : uuid <<PK>>
+  --
+  * project_id : uuid <<FK>>
+  * category_id : uuid <<FK>>
+  stage_id : uuid <<FK>>
+  * item_name : text
+  * quantity : numeric(12,3)
+  * unit : text
+  * unit_price : bigint (VND)
+  * line_total : bigint <<generated>>
+  * transaction_date : date
+  note : text
+  created_by : uuid <<FK>>
+}
+
+entity stages {
+  * id : uuid <<PK>>
+  --
+  * project_id : uuid <<FK>>
+  * name : text
+  * sequence_order : int
+  planned_start_date / planned_end_date : date
+  actual_start_date / actual_end_date : date
+  * status : enum {not_started, in_progress, completed}
+  progress_note : text
+}
+
+entity stage_assignments {
+  * stage_id : uuid <<PK, FK>>
+  * member_id : uuid <<PK, FK>>
+  --
+  * project_id : uuid <<FK>>
+  * assigned_at : timestamptz
+}
+
+entity workers {
+  * id : uuid <<PK>>
+  --
+  * project_id : uuid <<FK>>
+  * full_name : text
+  phone : text
+  * trade : text
+  * rate_type : enum {daily, hourly}
+  * agreed_rate : bigint (VND)
+  * is_active : bool
+}
+
+entity attendance_records {
+  * id : uuid <<PK>>
+  --
+  * project_id : uuid <<FK>>
+  * worker_id : uuid <<FK>>
+  * work_date : date
+  * status : enum {absent, half_day, full_day, hourly}
+  * units : numeric(4,2)
+  * rate_type_snapshot : enum
+  * captured_rate : bigint (VND)
+  note : text
+  recorded_by : uuid <<FK>>
+}
+
+entity ai_chat_messages {
+  * id : uuid <<PK>>
+  --
+  * project_id : uuid <<FK>>
+  * user_id : uuid <<FK>>
+  * role : enum {user, assistant}
+  * content : text
+  * created_at : timestamptz
+}
+
+users ||--|| profiles
+profiles ||--o{ projects : owns
+profiles ||--o{ project_members : "is invited as"
+projects ||--o| project_budgets
+projects ||--o{ project_members
+projects ||--|{ budget_categories
+projects ||--o{ stages
+projects ||--o{ expenses
+projects ||--o{ workers
+projects ||--o{ ai_chat_messages
+budget_categories ||--o{ expenses : classifies
+stages |o--o{ expenses : "optionally linked"
+stages ||--o{ stage_assignments
+project_members ||--o{ stage_assignments
+workers ||--o{ attendance_records : "one per date"
+profiles ||--o{ ai_chat_messages : asks
+
+note bottom of attendance_records
+  UNIQUE (worker_id, work_date)  — BR-10
+  captured_rate copied from workers by trigger — BR-11
+end note
+note bottom of projects
+  max 2 rows with status = 'active'
+  per owner (trigger) — BR-01
+end note
+@enduml

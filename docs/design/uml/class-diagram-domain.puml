@@ -1,0 +1,221 @@
+@startuml class-diagram-domain
+' HomeMate AI — Design class diagram, package "domain" (PA3, SCRUM-30)
+skinparam dpi 160
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #1F4E79
+  ArrowColor #1F4E79
+  HeaderBackgroundColor #DCE6F2
+}
+hide empty members
+
+package "domain" {
+
+enum ConstructionType {
+  NEW_BUILD
+  RENOVATION
+}
+enum StageStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+enum RateType {
+  DAILY
+  HOURLY
+}
+enum AttendanceStatus {
+  ABSENT
+  HALF_DAY
+  FULL_DAY
+  HOURLY
+}
+enum ThresholdState {
+  NORMAL
+  WARNING
+  REACHED
+}
+enum ProjectStatus {
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+enum MemberStatus {
+  INVITED
+  ACTIVE
+  REVOKED
+}
+
+class Project {
+  - id : UUID
+  - ownerId : UUID
+  - name : string
+  - constructionType : ConstructionType
+  - floorCount : number [0..1]
+  - floorAreaM2 : number [0..1]
+  - targetStartDate : Date [0..1]
+  - targetEndDate : Date [0..1]
+  - status : ProjectStatus
+  --
+  + isOwnedBy(userId : UUID) : boolean
+  + isActive() : boolean
+  + complete() : void
+}
+
+class ProjectMember {
+  - id : UUID
+  - projectId : UUID
+  - userId : UUID
+  - status : MemberStatus
+  - canRecordAttendance : boolean
+  - canUpdateAssignedStages : boolean
+  --
+  + hasPermission(p : Permission) : boolean
+  + revoke() : void
+}
+
+class ProjectBudget {
+  - projectId : UUID
+  - totalPlannedAmount : VND
+  --
+  + remaining(totalSpent : VND) : VND
+  + allocationExceeds(categories : BudgetCategory[]) : boolean
+}
+
+class BudgetCategory {
+  - id : UUID
+  - projectId : UUID
+  - name : string
+  - plannedAmount : VND
+  --
+  + remaining(spent : VND) : VND
+}
+
+class Expense {
+  - id : UUID
+  - projectId : UUID
+  - categoryId : UUID
+  - stageId : UUID [0..1]
+  - itemName : string
+  - quantity : number
+  - unit : string
+  - unitPrice : VND
+  - transactionDate : Date
+  - note : string [0..1]
+  --
+  + calculateLineTotal() : VND
+  + validate() : ValidationResult
+}
+
+class ConstructionStage {
+  - id : UUID
+  - projectId : UUID
+  - name : string
+  - sequenceOrder : number
+  - plannedStartDate : Date [0..1]
+  - plannedEndDate : Date [0..1]
+  - actualStartDate : Date [0..1]
+  - actualEndDate : Date [0..1]
+  - status : StageStatus
+  - progressNote : string [0..1]
+  --
+  + start(date : Date) : void
+  + complete(date : Date) : void
+  + reopen() : void
+  + canTransitionTo(s : StageStatus) : boolean
+  + validateDates() : ValidationResult
+}
+
+class StageDraft <<transient DTO>> {
+  + name : string
+  + plannedStartDate : Date
+  + plannedEndDate : Date
+  + keyTasks : string[]
+}
+
+class Worker {
+  - id : UUID
+  - projectId : UUID
+  - fullName : string
+  - phone : string [0..1]
+  - trade : string
+  - rateType : RateType
+  - agreedRate : VND
+  - isActive : boolean
+  --
+  + changeRate(newRate : VND) : void
+  + deactivate() : void
+}
+
+class AttendanceRecord {
+  - id : UUID
+  - workerId : UUID
+  - workDate : Date
+  - status : AttendanceStatus
+  - units : number
+  - rateTypeSnapshot : RateType
+  - capturedRate : VND
+  - note : string [0..1]
+  --
+  + {static} unitsFor(s : AttendanceStatus, hours : number) : number
+  + estimateWage(calc : WageCalculator) : VND
+}
+
+class ChatMessage {
+  - id : UUID
+  - projectId : UUID
+  - role : "user" | "assistant"
+  - content : string
+  - createdAt : Date
+}
+
+interface WageStrategy {
+  + validateUnits(s : AttendanceStatus, units : number) : boolean
+  + estimate(units : number, rate : VND) : VND
+}
+class DailyWageStrategy
+class HourlyWageStrategy
+class WageCalculator {
+  - strategies : Map<RateType, WageStrategy>
+  --
+  + estimate(r : AttendanceRecord) : VND
+  + summarize(records : AttendanceRecord[], from : Date, to : Date) : WageSummary
+}
+
+class BudgetThresholdEvaluator {
+  + {static} WARNING_RATIO : number = 0.85
+  + {static} REACHED_RATIO : number = 1.0
+  + evaluate(planned : VND, spent : VND) : ThresholdState
+}
+
+Project "1" *-- "0..1" ProjectBudget
+Project "1" *-- "1..*" BudgetCategory
+Project "1" *-- "0..*" Expense
+Project "1" *-- "0..*" ConstructionStage
+Project "1" *-- "0..*" Worker
+Project "1" *-- "0..*" ProjectMember
+Project "1" *-- "0..*" ChatMessage
+BudgetCategory "1" o-- "0..*" Expense : classifies >
+ConstructionStage "0..1" o-- "0..*" Expense : linked to >
+ProjectMember "0..*" -- "0..*" ConstructionStage : assigned to >
+Worker "1" *-- "0..*" AttendanceRecord
+StageDraft ..> ConstructionStage : <<becomes on confirm>>
+
+WageStrategy <|.. DailyWageStrategy
+WageStrategy <|.. HourlyWageStrategy
+WageCalculator o-- "2" WageStrategy : selects by RateType
+AttendanceRecord ..> WageCalculator
+BudgetCategory ..> BudgetThresholdEvaluator : uses
+BudgetThresholdEvaluator ..> ThresholdState
+ConstructionStage --> StageStatus
+AttendanceRecord --> AttendanceStatus
+Worker --> RateType
+Project --> ConstructionType
+Project --> ProjectStatus
+ProjectMember --> MemberStatus
+}
+@enduml
