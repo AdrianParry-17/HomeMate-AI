@@ -1,0 +1,46 @@
+@startuml seq-uc04-record-expense
+' UC-04 Record a material or labour expense (PA3-E, SCRUM-35).
+!include _style.iuml
+title UC-04 — Record an expense
+actor "Household Owner" as owner
+boundary "Expense Tracker\n(SCR-03)" as ui
+participant ":ExpenseService" as es
+participant ":Expense" as ex
+participant ":SupabaseGateway" as gw
+database "PostgreSQL" as db
+participant ":BudgetService" as bs
+participant ":BudgetThresholdEvaluator" as te
+
+owner -> ui : Fill Add Expense form
+ui -> ex : calculateLineTotal()
+ex --> ui : live preview (quantity × unit price)
+owner -> ui : Save
+ui -> es : addExpense(input : ExpenseInput)
+es -> ex : validate()
+alt invalid input (quantity or unit price ≤ 0, missing field)
+  ex --> es : ValidationResult (errors)
+  es --> ui : Result error
+  ui --> owner : inline validation errors (UC-04 E1, E2)
+else valid
+  ex --> es : ValidationResult (ok)
+  es -> gw : client.insert(expenses)
+  gw -> db : INSERT expenses (RLS owner; CHECK > 0; line_total generated)
+  alt save succeeds
+    db --> gw : new row
+    gw --> es : Result<Expense>
+    es --> ui : expense saved
+    ui -> bs : getDashboardSummary(projectId)
+    bs -> gw : client.select(v_category_spending, v_project_financial_summary)
+    gw -> db : SELECT views
+    db --> bs : planned, spent, remaining per category
+    bs -> te : evaluate(planned, spent)
+    te --> bs : ThresholdState (NORMAL / WARNING / REACHED)
+    bs --> ui : DashboardSummary
+    ui --> owner : updated totals and indicators (AC-03)
+  else network failure
+    gw --> es : toResult(error)
+    es --> ui : Result error
+    ui --> owner : error state; form data kept for retry (UC-04 E3)
+  end
+end
+@enduml

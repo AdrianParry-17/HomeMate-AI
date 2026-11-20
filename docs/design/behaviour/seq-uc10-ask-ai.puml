@@ -1,0 +1,51 @@
+@startuml seq-uc10-ask-ai
+' UC-10 Ask a context-aware AI project question (PA3-E, SCRUM-35).
+!include _style.iuml
+title UC-10 — Ask a project question
+actor "Household Owner" as owner
+boundary "AI Assistance\n(SCR-06)" as ui
+participant ":AIAssistantService" as svc
+participant ":SupabaseGateway" as gw
+participant ":AskAssistantHandler\n«edge function»" as h
+database "PostgreSQL" as db
+participant ":ProjectContextBuilder" as cb
+participant ":PromptBuilder" as pb
+participant ":AIProvider\n(GeminiClient)" as ai
+participant ":SafetyPolicy" as sp
+
+owner -> ui : Type a question, Send
+ui -> svc : askQuestion(projectId, question)
+svc -> gw : invoke("ask-assistant", body, 20000)
+gw -> h : handle(req) [HTTPS + JWT]
+h -> h : authenticate(req)
+h -> sp : isCertificationRequest(question)
+alt structural-safety or certification request (UC-10 E1)
+  sp --> h : true
+  h -> sp : attachDisclaimer(refusal + advice to consult an engineer)
+  sp --> h : AIAnswer
+else normal question
+  sp --> h : false
+  h -> db : rpc get_ai_project_context(project)
+  note right of db
+    Returns data only for the caller's own project;
+    workers appear as "Worker_01 (Mason)" (FR-22)
+  end note
+  db --> h : ProjectSnapshot
+  h -> cb : fromSnapshot(json).sanitize(PiiSanitizer).limitTokens(2000).build()
+  cb --> h : ProjectContext
+  h -> pb : buildQuestionPrompt(ctx, question)
+  pb --> h : prompt
+  h -> ai : generateText(prompt, 20000)
+  alt answer received
+    ai --> h : text
+    h -> sp : attachDisclaimer(answer)
+    sp --> h : AIAnswer
+  else timeout, HTTP 429 or 5xx (UC-10 E3)
+    ai --> h : AIUnavailableError
+    h -> h : toErrorResponse(error)
+  end
+end
+h --> gw : AIAnswer or error
+gw --> svc : Result<AIAnswer>
+svc --> ui : answer with disclaimer, or friendly fallback with retry
+@enduml

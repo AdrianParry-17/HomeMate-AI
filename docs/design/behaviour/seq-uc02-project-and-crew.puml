@@ -1,0 +1,56 @@
+@startuml seq-uc02-project-and-crew
+' UC-02 Create project and manage crew leader permissions (PA3-E, SCRUM-35).
+' Flow by Vo Thuc Tri; messages mapped to docs/design/uml/class-diagram-services.puml.
+!include _style.iuml
+title UC-02 — Create a project and invite a crew leader
+actor "Household Owner" as owner
+boundary "Access screen\n(SCR-02 project switcher)" as ui
+participant ":ProjectService" as ps
+participant ":SupabaseGateway" as gw
+participant ":InviteCrewHandler\n«edge function invite-crew»" as inv
+participant "Supabase Auth" as auth
+database "PostgreSQL" as db
+actor "Crew Leader" as crew
+
+owner -> ui : Create project (name, type, scale, dates)
+ui -> ps : createProject(input : ProjectInput)
+ps -> gw : client.insert(projects)
+gw -> db : INSERT projects (RLS: owner_id = auth.uid())
+db -> db : trigger enforce_active_project_limit (BR-01)
+alt fewer than 2 active projects
+  db --> gw : new row
+  gw --> ps : Result<Project>
+  ps --> ui : project created
+else third active project
+  db --> gw : error (limit reached)
+  gw --> ps : toResult(error)
+  ps --> ui : Result error
+  ui --> owner : "The MVP supports up to 2 active projects" (AC-02)
+end
+
+owner -> ui : Invite crew leader (email, permissions)
+ui -> ps : inviteCrewLeader(projectId, email, perms)
+ps -> gw : invoke("invite-crew", body, 20000)
+gw -> inv : handle(req) [HTTPS + JWT]
+inv -> inv : authenticate(req)
+alt caller owns the project
+  inv -> auth : invite user by e-mail (service-role key)
+  auth --> crew : invitation e-mail
+  inv -> db : INSERT project_members (status invited, permission flags)
+  inv --> gw : ProjectMember
+  gw --> ps : Result<ProjectMember>
+  ps --> ui : invitation sent
+else caller is not the owner
+  inv --> gw : toErrorResponse(403)
+  gw --> ps : Result error
+  ps --> ui : access denied
+end
+
+crew -> ui : Open link, set password, sign in
+ui -> ps : acceptInvitation(projectId)
+ps -> gw : client.rpc("accept_invitation")
+gw -> db : accept_invitation(project): status = active
+db --> gw : ok
+gw --> ps : Result<void>
+ps --> ui : crew leader sees only granted stages and attendance
+@enduml

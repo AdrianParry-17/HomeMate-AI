@@ -1,0 +1,23 @@
+skinparam dpi 150
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam maxMessageSize 170
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+skinparam sequence {
+  ArrowColor #1F4E79
+  LifeLineBorderColor #7A93AC
+  ParticipantBorderColor #1F4E79
+  ParticipantBackgroundColor #DCE6F2
+  ActorBorderColor #1F4E79
+  ActorBackgroundColor #DCE6F2
+  GroupBorderColor #7A93AC
+  GroupBackgroundColor #F1F5F8
+}
+skinparam note {
+  BackgroundColor #FFFBEA
+  BorderColor #C9B458
+}
+hide footbox
+autonumber "<b>0."

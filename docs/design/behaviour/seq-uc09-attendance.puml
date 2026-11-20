@@ -1,0 +1,43 @@
+@startuml seq-uc09-attendance
+' UC-09 Record daily attendance and estimate wages (PA3-E, SCRUM-35).
+!include _style.iuml
+title UC-09 — Record daily attendance and estimate wages
+actor "Owner or Crew Leader" as user
+boundary "Worker Attendance\n(SCR-05)" as ui
+participant ":AttendanceService" as svc
+participant ":SupabaseGateway" as gw
+database "PostgreSQL" as db
+participant ":WageCalculator" as wc
+
+user -> ui : Pick a work date; mark Full / Half / Absent / hours
+ui -> svc : recordAttendance(projectId, date, entries : AttendanceEntry[])
+svc -> gw : client.rpc("upsert_attendance")
+gw -> db : upsert_attendance(project, date, entries)
+alt caller is the owner, or a crew leader with attendance permission
+  alt future date, hours outside 0–24, or inactive worker
+    db --> gw : error
+    gw --> svc : toResult(error)
+    svc --> ui : Result error (UC-09 E2)
+  else valid
+    db -> db : trigger snapshot_attendance_rate copies rate type and agreed rate (BR-11)
+    db -> db : same worker and date: update the existing row (upsert, BR-10)
+    db --> gw : rows saved
+    gw --> svc : Result<number>
+    svc --> ui : attendance saved
+  end
+else no attendance permission
+  db --> gw : error (forbidden)
+  gw --> svc : toResult(error)
+  svc --> ui : access denied (UC-09 E3)
+end
+
+opt owner reviews wages for a period
+  ui -> svc : getWageSummary(projectId, from, to)
+  svc -> gw : client.select(v_attendance_wages)
+  gw -> db : SELECT v_attendance_wages (owner only)
+  db --> svc : AttendanceRecord[] with captured rates
+  svc -> wc : summarize(records, from, to)
+  wc --> svc : WageSummary (4.5 days × 500,000 = 2,250,000 VND, AC-07)
+  svc --> ui : period totals per worker
+end
+@enduml

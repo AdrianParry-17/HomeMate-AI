@@ -1,0 +1,58 @@
+@startuml seq-uc06-ai-stage-plan
+' UC-06 Generate an AI-assisted construction stage plan (PA3-E, SCRUM-35).
+!include _style.iuml
+title UC-06 — Generate and confirm an AI stage plan
+actor "Household Owner" as owner
+boundary "Construction Schedule\n(SCR-04)" as ui
+participant ":StageService" as ss
+participant ":SupabaseGateway" as gw
+participant ":GenerateStagePlanHandler\n«edge function»" as h
+participant ":PromptBuilder" as pb
+participant ":AIProvider\n(GeminiClient)" as ai
+participant ":StagePlanValidator" as val
+participant ":SafetyPolicy" as sp
+database "PostgreSQL" as db
+
+owner -> ui : Enter type, scale, start date, milestones
+ui -> ss : requestAIDraft(projectId, input : PlanInput)
+ss -> gw : invoke("generate-stage-plan", body, 20000)
+gw -> h : handle(req) [HTTPS + JWT]
+h -> h : authenticate(req)
+h -> pb : buildStagePlanPrompt(input)
+pb --> h : prompt
+h -> ai : generateJson(prompt, schema, 20000)
+alt Gemini answers in time
+  ai --> h : raw JSON
+  h -> val : validate(raw)
+  alt JSON matches the stage-plan schema
+    val --> h : StageDraft[]
+    h -> sp : attachDisclaimer(...)
+    sp --> h : drafts + disclaimer
+    h --> gw : StageDraft[]
+    gw --> ss : Result<StageDraft[]>
+    ss --> ui : editable draft (nothing stored)
+  else malformed JSON (UC-06 E1)
+    val --> h : error
+    h --> gw : toErrorResponse(error)
+    gw --> ui : retry, or plan manually
+  end
+else timeout > 20 s or HTTP 429 (UC-06 E2)
+  ai --> h : AIUnavailableError
+  h --> gw : toErrorResponse(error)
+  gw --> ui : safe error; manual planning stays available
+end
+
+alt owner confirms
+  owner -> ui : Edit names and dates, then "Confirm & Save"
+  ui -> ss : confirmDraft(projectId, drafts : StageDraft[])
+  ss -> gw : client.rpc("confirm_stage_plan")
+  gw -> db : confirm_stage_plan(project, stages)
+  db -> db : insert all stages in one transaction (status not_started)
+  db --> gw : number of stages
+  gw --> ss : Result<number>
+  ss --> ui : schedule saved
+else owner discards or closes the page (UC-06 A2, E3)
+  ui -> ui : drop the draft from memory
+  note right of db : no stage rows exist for an unconfirmed draft (BR-08, AC-05)
+end
+@enduml

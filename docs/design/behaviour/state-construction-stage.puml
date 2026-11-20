@@ -1,0 +1,28 @@
+@startuml state-construction-stage
+' Construction Stage state machine (PA3-E, SCRUM-36), updated with the team decisions from the
+' PA3 design review: new stages start in Not Started (T2) and In Progress -> Not Started undo (H6).
+!pragma layout smetana
+skinparam dpi 150
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam state {
+  BackgroundColor #DCE6F2
+  BorderColor #1F4E79
+  ArrowColor #1F4E79
+}
+title Construction Stage — state machine (ConstructionStage.status)
+state "Not Started" as NotStarted
+state "In Progress" as InProgress
+state "Completed" as Completed
+[*] --> NotStarted : addStage() or confirmDraft()\n[owner]
+NotStarted --> InProgress : start(date)\n[owner or assigned crew leader]\n/ actualStartDate = date
+InProgress --> NotStarted : undo\n[owner or assigned crew leader]\n/ clear actualStartDate
+InProgress --> Completed : complete(date)\n[owner or assigned crew leader;\nend >= start (BR-07)]\n/ actualEndDate = date
+Completed --> InProgress : reopen()\n[owner only, rework (UC-07 A1)]\n/ clear actualEndDate
+note bottom of Completed
+  In any state the owner may rename, re-date, reorder or delete the stage (FR-15).
+  Allowed transitions are checked by ConstructionStage.canTransitionTo();
+  update_stage_progress checks permissions and dates.
+end note
+@enduml
